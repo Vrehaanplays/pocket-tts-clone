@@ -77,6 +77,7 @@ jobs:
       - name: Build Swift App (Debug, device only)
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
+          SHERPA_SRC="$(pwd)/sherpa-onnx"
           # Xcode 16 resolves Package.swift natively — no xcodeproj needed
           xcodebuild clean build \
             -scheme PocketTTSClone \
@@ -87,7 +88,7 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
-            HEADER_SEARCH_PATHS="$FRAMEWORK_PATH/Headers sherpa-onnx" \
+            HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" || \
             echo "⚠️ Build had warnings — check logs"
 
@@ -95,6 +96,7 @@ jobs:
         if: github.event.inputs.skip_archive != 'true'
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
+          SHERPA_SRC="$(pwd)/sherpa-onnx"
           xcodebuild archive \
             -scheme PocketTTSClone \
             -sdk iphoneos \
@@ -107,7 +109,7 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS=arm64 \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
-            HEADER_SEARCH_PATHS="$FRAMEWORK_PATH/Headers sherpa-onnx" \
+            HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx"
 
       - name: Export unsigned IPA

@@ -18,7 +18,7 @@ struct GenerateButton: View {
             .padding(.vertical, 16)
             .background(
                 RoundedRectangle(cornerRadius: 14)
-                    .fill(canGenerate ? Color.accentColor : .quaternary)
+                    .fill(canGenerate ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary))
             )
             .opacity(canGenerate ? 1 : 0.6)
         }

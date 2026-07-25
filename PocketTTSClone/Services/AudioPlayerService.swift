@@ -7,6 +7,7 @@ final class AudioPlayerService: NSObject, ObservableObject {
     @Published var currentTime: TimeInterval = 0
     @Published var playbackProgress: Double = 0
 
+    private(set) var currentFileURL: URL?
     private var audioPlayer: AVAudioPlayer?
     private var progressTimer: Timer?
 

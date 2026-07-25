@@ -30,7 +30,7 @@ struct TextEditorView: View {
             .clipShape(RoundedRectangle(cornerRadius: 12))
             .overlay(
                 RoundedRectangle(cornerRadius: 12)
-                    .stroke(isFocused ? Color.accentColor : .quaternary, lineWidth: 1)
+                    .stroke(isFocused ? AnyShapeStyle(Color.accentColor) : AnyShapeStyle(.quaternary), lineWidth: 1)
             )
             .animation(.easeInOut(duration: 0.2), value: isFocused)
 

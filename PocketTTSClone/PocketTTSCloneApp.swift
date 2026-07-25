@@ -4,7 +4,6 @@ import AVFoundation
 @main
 struct PocketTTSCloneApp: App {
     @StateObject private var ttsViewModel = TTSViewModel()
-    @Environment(\.colorScheme) private var colorScheme
 
     init() {
         configureAudioSession()
@@ -14,7 +13,6 @@ struct PocketTTSCloneApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(ttsViewModel)
-                .preferredColorScheme(.automatic)
                 .onAppear {
                     // Request microphone permission early
                     AVAudioSession.sharedInstance().requestRecordPermission { granted in
