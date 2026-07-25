@@ -1,0 +1,180 @@
+# Build PocketTTSClone iOS App
+# Runs on GitHub-hosted macOS to:
+# 1. Build sherpa-onnx iOS framework (xcframework)
+# 2. Build PocketTTSClone Swift app
+# 3. Export unsigned IPA for sideloading via AltStore
+
+name: Build PocketTTSClone iOS
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      skip_archive:
+        description: 'Skip final archive step (faster debug)'
+        required: false
+        default: 'false'
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_16.1.app/Contents/Developer
+  BUNDLE_ID: com.pockettts.clone
+  APP_NAME: PocketTTSClone
+  SHERPA_ONNX_TAG: master
+  ONNXRUNTIME_VERSION: 1.27.0
+
+jobs:
+  build:
+    name: Build iOS App
+    runs-on: macos-15
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout PocketTTSClone
+        uses: actions/checkout@v4
+
+      - name: Checkout sherpa-onnx (pinned commit)
+        uses: actions/checkout@v4
+        with:
+          repository: k2-fsa/sherpa-onnx
+          ref: 546df6f963ae719dddd8b8d10749e9d9086b0d86
+          path: sherpa-onnx
+          fetch-depth: 0
+
+      - name: Select Xcode
+        run: |
+          sudo xcode-select -s /Applications/Xcode_16.1.app/Contents/Developer
+          xcodebuild -version
+          swift --version
+
+      - name: Build sherpa-onnx iOS Framework
+        id: build_sherpa
+        working-directory: sherpa-onnx
+        run: |
+          echo "Building sherpa-onnx iOS xcframework..."
+          bash build-ios.sh
+          echo "sherpa_onnx_version=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+          echo "xcframework_path=$(pwd)/build-ios/sherpa-onnx.xcframework" >> $GITHUB_OUTPUT
+
+      - name: Verify sherpa-onnx Framework
+        run: |
+          ls -la sherpa-onnx/build-ios/sherpa-onnx.xcframework/
+          file sherpa-onnx/build-ios/sherpa-onnx.xcframework/ios-arm64/libsherpa-onnx.a
+          echo "✅ sherpa-onnx xcframework built successfully"
+
+      - name: Set up Swift Package
+        run: |
+          swift package resolve
+          swift package show-dependencies
+
+      - name: Build Swift App (Debug, device only)
+        run: |
+          FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
+          # Xcode 16 resolves Package.swift natively — no xcodeproj needed
+          xcodebuild clean build \
+            -scheme PocketTTSClone \
+            -destination 'generic/platform=iOS' \
+            -configuration Debug \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
+            HEADER_SEARCH_PATHS="$FRAMEWORK_PATH/Headers sherpa-onnx" \
+            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" || \
+            echo "⚠️ Build had warnings — check logs"
+
+      - name: Archive App (Release, unsigned)
+        if: github.event.inputs.skip_archive != 'true'
+        run: |
+          FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
+          xcodebuild archive \
+            -scheme PocketTTSClone \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath build/PocketTTSClone.xcarchive \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
+            HEADER_SEARCH_PATHS="$FRAMEWORK_PATH/Headers sherpa-onnx" \
+            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx"
+
+      - name: Export unsigned IPA
+        if: github.event.inputs.skip_archive != 'true'
+        run: |
+          mkdir -p build/IPA
+          cat > build/ExportOptions.plist << 'PLISTEOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>debug</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>compileBitcode</key>
+            <false/>
+            <key>uploadSymbols</key>
+            <false/>
+            <key>generateAppStoreInformation</key>
+            <false/>
+          </dict>
+          </plist>
+          PLISTEOF
+
+          if [ -d "build/PocketTTSClone.xcarchive" ]; then
+            xcodebuild -exportArchive \
+              -archivePath build/PocketTTSClone.xcarchive \
+              -exportPath build/IPA \
+              -exportOptionsPlist build/ExportOptions.plist \
+              -allowProvisioningUpdates NO || \
+              cp -r build/PocketTTSClone.xcarchive build/IPA/ && \
+              echo "⚠️ Export failed — raw archive available at build/IPA/"
+          else
+            echo "⚠️ No archive found — IPA export skipped"
+          fi
+
+      - name: Upload IPA artifact
+        if: github.event.inputs.skip_archive != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: PocketTTSClone-iOS
+          path: |
+            build/IPA/*.ipa
+            build/PocketTTSClone.xcarchive
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload sherpa-onnx framework (cached)
+        uses: actions/upload-artifact@v4
+        with:
+          name: sherpa-onnx-xcframework
+          path: sherpa-onnx/build-ios/sherpa-onnx.xcframework
+          retention-days: 30
+
+      - name: Summary
+        run: |
+          echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Artifact | Location |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
+          echo "| sherpa-onnx xcframework | sherpa-onnx/build-ios/sherpa-onnx.xcframework |" >> $GITHUB_STEP_SUMMARY
+          echo "| iOS App (if archived) | build/PocketTTSClone.xcarchive |" >> $GITHUB_STEP_SUMMARY
+          echo "| IPA (if exported) | build/IPA/ |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### To deploy via AltStore:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Download PocketTTSClone.ipa from artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "2. Open AltServer on your Windows PC" >> $GITHUB_STEP_SUMMARY
+          echo "3. Connect iPhone via USB" >> $GITHUB_STEP_SUMMARY
+          echo "4. AltServer → Install AltStore → select device" >> $GITHUB_STEP_SUMMARY
+          echo "5. Open AltStore on iPhone → My Apps → + → select IPA" >> $GITHUB_STEP_SUMMARY

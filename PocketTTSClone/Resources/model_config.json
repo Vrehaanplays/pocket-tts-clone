@@ -1,0 +1,27 @@
+{
+  "name": "sherpa-onnx-pocket-tts-int8-2026-01-26",
+  "version": "2026-01-26",
+  "source": "https://huggingface.co/csukuangfj2/sherpa-onnx-pocket-tts-int8-2026-01-26",
+  "files": {
+    "lm_flow": "lm_flow.int8.onnx",
+    "lm_main": "lm_main.int8.onnx",
+    "encoder": "encoder.onnx",
+    "decoder": "decoder.int8.onnx",
+    "text_conditioner": "text_conditioner.onnx",
+    "vocab_json": "vocab.json",
+    "token_scores_json": "token_scores.json"
+  },
+  "test_audio": {
+    "bria": "test_wavs/bria.wav"
+  },
+  "default_config": {
+    "num_threads": 2,
+    "speed": 1.0,
+    "seed": -1,
+    "max_reference_audio_len": 10.0,
+    "num_steps": 8,
+    "silence_scale": 0.2,
+    "voice_embedding_cache_capacity": 50
+  },
+  "description": "Pocket TTS int8 quantized model with voice cloning support"
+}

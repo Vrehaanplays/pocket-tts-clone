@@ -1,0 +1,15 @@
+# Ignore everything at root except the project source, .github, and config files
+/*
+!/PocketTTSClone/
+!.github/
+!Package.swift
+!.gitignore
+!README.md
+
+# Build artifacts
+/build/
+
+# Xcode user data
+*.xcuserdata
+*.xcworkspace/xcuserdata
+DerivedData/
