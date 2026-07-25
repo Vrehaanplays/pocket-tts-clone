@@ -25,6 +25,12 @@ let package = Package(
             cSettings: [
                 .headerSearchPath("Bridging")
             ],
+            swiftSettings: [
+                .unsafeFlags([
+                    "-import-objc-header", "PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h",
+                    "-Xcc", "-I$SRCROOT"
+                ])
+            ],
             linkerSettings: [
                 .linkedLibrary("c++"),
                 .linkedFramework("AVFoundation"),

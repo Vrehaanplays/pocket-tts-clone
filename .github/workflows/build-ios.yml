@@ -69,16 +69,19 @@ jobs:
           file sherpa-onnx/build-ios/sherpa-onnx.xcframework/ios-arm64/libsherpa-onnx.a
           echo "✅ sherpa-onnx xcframework built successfully"
 
-      - name: Set up Swift Package
+      - name: Set up Swift Package & generate scheme
         run: |
           swift package resolve
           swift package show-dependencies
+          # Force generation of .xcworkspace so xcodebuild finds the scheme
+          xcodebuild -resolvePackageDependencies 2>&1 || true
+          ls -la .swiftpm/xcode/ 2>/dev/null || echo "No .swiftpm/xcode dir"
 
       - name: Build Swift App (Debug, device only)
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           SHERPA_SRC="$(pwd)/sherpa-onnx"
-          # Xcode 16 resolves Package.swift natively — no xcodeproj needed
+          BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
           xcodebuild clean build \
             -scheme PocketTTSClone \
             -destination 'generic/platform=iOS' \
@@ -89,7 +92,8 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
             HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
-            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" || \
+            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
+            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || \
             echo "⚠️ Build had warnings — check logs"
 
       - name: Archive App (Release, unsigned)
@@ -97,6 +101,7 @@ jobs:
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           SHERPA_SRC="$(pwd)/sherpa-onnx"
+          BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
           xcodebuild archive \
             -scheme PocketTTSClone \
             -sdk iphoneos \
@@ -110,7 +115,8 @@ jobs:
             ARCHS=arm64 \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
             HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
-            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx"
+            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
+            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER"
 
       - name: Export unsigned IPA
         if: github.event.inputs.skip_archive != 'true'
