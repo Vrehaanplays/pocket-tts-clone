@@ -72,12 +72,16 @@ jobs:
           if [ -n "$SHERPA_HEADER" ]; then
             HEADER_DIR=$(dirname "$SHERPA_HEADER")
             echo "Found headers at: $HEADER_DIR"
-            cp -r "$HEADER_DIR" PocketTTSClone/Bridging/c-api
+            cp "$HEADER_DIR/c-api.h" PocketTTSClone/Bridging/c-api/
             ls -la PocketTTSClone/Bridging/c-api/
           else
             echo "⚠️ Could not find c-api.h in sherpa-onnx checkout"
             exit 1
           fi
+
+      - name: Debug: verify header location
+        run: |
+          ls -la PocketTTSClone/Bridging/c-api/
 
       - name: Resolve Swift Package dependencies
         run: |
