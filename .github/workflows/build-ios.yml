@@ -97,19 +97,9 @@ jobs:
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
           IOS_TARGET="arm64-apple-ios17.0"
           FRAMEWORK_DIR="$(dirname "$FRAMEWORK_PATH")"
-          # Try xcodebuild with scheme (no -target, SPM-based project has no .xcodeproj)
+          # Try xcodebuild with scheme (SPM-based project, no .xcodeproj)
           xcodebuild clean build \
             -scheme PocketTTSClone \
-            -destination 'generic/platform=iOS' \
-            -configuration Debug \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
-            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
-            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" ||
-          xcodebuild clean build \
-            -scheme PocketTTSClone-Package \
             -destination 'generic/platform=iOS' \
             -configuration Debug \
             CODE_SIGN_IDENTITY="" \
@@ -121,7 +111,7 @@ jobs:
               echo "[WARN] xcodebuild failed -- trying swift build for iOS"
               swift build \
                 -c debug \
-                --destination $IOS_TARGET \
+                -Xswiftc -target -Xswiftc $IOS_TARGET \
                 -Xlinker -L$FRAMEWORK_PATH/ios-arm64 -Xlinker -lsherpa-onnx \
                 -Xswiftc -import-objc-header -Xswiftc $BRIDGING_HEADER 2>&1 || \
                 echo "[WARN] swift build also failed"
@@ -150,23 +140,8 @@ jobs:
             SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER"
           then
             ARCHIVE_OK=true
-          elif xcodebuild archive \
-            -scheme PocketTTSClone-Package \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -configuration Release \
-            -archivePath build/PocketTTSClone.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ARCHS=arm64 \
-            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
-            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
-            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER"
-          then
-            ARCHIVE_OK=true
           else
-            echo "[WARN] All xcodebuild archive attempts failed"
+            echo "[WARN] xcodebuild archive failed"
             ARCHIVE_OK=false
           fi
 

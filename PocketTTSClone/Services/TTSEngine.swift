@@ -168,25 +168,34 @@ final class TTSEngine {
                 }
                 genConfig.extra = extraC
 
-                // The C API callback is: int32_t callback(const float*, int32_t, float, void*)
-                // The 4th argument is the combined callback, 5th is user data
-                let callback: SherpaOnnxGeneratedAudioProgressCallbackWithArg = { _, _, progress, _ in
-                    if let handler = progressHandler {
-                        DispatchQueue.main.async {
-                            handler(Double(progress))
+                // C callback — must be non-capturing, so pass progressHandler
+                // through the user_data void pointer
+                let handlerBox = progressHandler as AnyObject?
+                var userData: UnsafeMutableRawPointer? = nil
+                if let box = handlerBox {
+                    userData = Unmanaged.passUnretained(box).toOpaque()
+                }
+
+                // The C API callback: int32_t callback(const float*, int32_t, float, void*)
+                // 5th arg to GenerateWithConfig is user_data
+                let callback: SherpaOnnxGeneratedAudioProgressCallbackWithArg = { _, _, progress, ctx in
+                    if let ctx = ctx {
+                        let obj = Unmanaged<AnyObject>.fromOpaque(ctx).takeUnretainedValue()
+                        if let handler = obj as? (Double) -> Void {
+                            DispatchQueue.main.async {
+                                handler(Double(progress))
+                            }
                         }
                     }
                     return 1 // continue
                 }
 
-                // SherpaOnnxOfflineTtsGenerateWithConfig takes 5 arguments:
-                // (tts, text, &config, callback, user_data)
                 guard let audio = SherpaOnnxOfflineTtsGenerateWithConfig(
                     tts,
                     text,
                     &genConfig,
                     callback,
-                    nil
+                    userData
                 ) else {
                     if let cPtr = extraC { free(UnsafeMutablePointer(mutating: cPtr)) }
                     continuation.resume(throwing: AppError.generation("Generation returned nil"))
