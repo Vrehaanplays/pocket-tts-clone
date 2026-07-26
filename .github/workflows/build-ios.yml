@@ -63,21 +63,25 @@ jobs:
         run: |
           # Copy sherpa-onnx C API headers alongside bridging header so
           # clang finds them via default quoted-include resolution
-          # The sherpa-onnx repo has source at sherpa-onnx/sherpa-onnx/
-          SHERPA_REPO_SRC="$(pwd)/sherpa-onnx/sherpa-onnx"
-          echo "Checking for headers at: $SHERPA_REPO_SRC/c-api/c-api.h"
-          ls -la "$SHERPA_REPO_SRC/c-api/" 2>/dev/null || echo "Not at that path, checking alternatives..."
-          find sherpa-onnx -name "c-api.h" -path "*/c-api/*" 2>/dev/null
-          SHERPA_HEADER=$(find sherpa-onnx -name "c-api.h" -path "*/c-api/*" 2>/dev/null | head -1)
-          if [ -n "$SHERPA_HEADER" ]; then
-            HEADER_DIR=$(dirname "$SHERPA_HEADER")
-            echo "Found headers at: $HEADER_DIR"
-            cp "$HEADER_DIR/c-api.h" PocketTTSClone/Bridging/c-api/
-            ls -la PocketTTSClone/Bridging/c-api/
+          mkdir -p PocketTTSClone/Bridging/c-api
+          # The sherpa-onnx repo source tree is at sherpa-onnx/sherpa-onnx/
+          SHERPA_SRC="$(pwd)/sherpa-onnx/sherpa-onnx"
+          if [ -f "$SHERPA_SRC/c-api/c-api.h" ]; then
+            echo "Using known path: $SHERPA_SRC/c-api/c-api.h"
+            cp "$SHERPA_SRC/c-api/c-api.h" PocketTTSClone/Bridging/c-api/
           else
-            echo "[ERROR] Could not find c-api.h in sherpa-onnx checkout"
-            exit 1
+            # Fallback: exclude harmony-os, find the real c-api
+            SHERPA_HEADER=$(find sherpa-onnx -name "c-api.h" -path "*/sherpa-onnx/c-api/*" ! -path "*/harmony-os/*" 2>/dev/null | head -1)
+            if [ -n "$SHERPA_HEADER" ]; then
+              echo "Found via fallback: $SHERPA_HEADER"
+              cp "$SHERPA_HEADER" PocketTTSClone/Bridging/c-api/
+            else
+              echo "[ERROR] Could not find c-api.h in sherpa-onnx checkout"
+              find sherpa-onnx -name "c-api.h" 2>/dev/null
+              exit 1
+            fi
           fi
+          ls -la PocketTTSClone/Bridging/c-api/
 
       - name: "Debug: verify header location"
         run: |
