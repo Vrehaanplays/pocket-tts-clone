@@ -23,12 +23,12 @@ let package = Package(
                 .process("Assets.xcassets")
             ],
             cSettings: [
-                .headerSearchPath("Bridging")
+                .headerSearchPath("Bridging"),
+                .headerSearchPath("../sherpa-onnx")
             ],
             swiftSettings: [
                 .unsafeFlags([
-                    "-import-objc-header", "PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h",
-                    "-Xcc", "-I$SRCROOT"
+                    "-import-objc-header", "PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
                 ])
             ],
             linkerSettings: [

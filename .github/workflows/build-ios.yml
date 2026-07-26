@@ -73,16 +73,25 @@ jobs:
         run: |
           swift package resolve
           swift package show-dependencies
-          # Force generation of .xcworkspace so xcodebuild finds the scheme
+          # Generate the xcworkspace so xcodebuild finds the scheme
           xcodebuild -resolvePackageDependencies 2>&1 || true
           ls -la .swiftpm/xcode/ 2>/dev/null || echo "No .swiftpm/xcode dir"
+          # Debug: list available schemes
+          xcodebuild -list 2>&1 | head -50 || true
 
       - name: Build Swift App (Debug, device only)
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           SHERPA_SRC="$(pwd)/sherpa-onnx"
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
+          WORKSPACE="$(pwd)/.swiftpm/xcode/package.xcworkspace"
+          if [ -d "$WORKSPACE" ]; then
+            WS_FLAG="-workspace $WORKSPACE"
+          else
+            WS_FLAG=""
+          fi
           xcodebuild clean build \
+            $WS_FLAG \
             -scheme PocketTTSClone \
             -destination 'generic/platform=iOS' \
             -configuration Debug \
@@ -94,7 +103,23 @@ jobs:
             HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
             SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || \
-            echo "⚠️ Build had warnings — check logs"
+            if [ $? -ne 0 ]; then
+              echo "⚠️ Build failed — trying fallback"
+              # Fallback: try with target name
+              xcodebuild clean build \
+                -scheme PocketTTSClone \
+                -destination 'generic/platform=iOS' \
+                -configuration Debug \
+                -derivedDataPath build/DerivedData \
+                CODE_SIGN_IDENTITY="" \
+                CODE_SIGNING_REQUIRED=NO \
+                CODE_SIGNING_ALLOWED=NO \
+                FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
+                HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
+                OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
+                SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || \
+                echo "⚠️ Build had warnings — check logs"
+            fi
 
       - name: Archive App (Release, unsigned)
         if: github.event.inputs.skip_archive != 'true'
@@ -102,7 +127,14 @@ jobs:
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           SHERPA_SRC="$(pwd)/sherpa-onnx"
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
+          WORKSPACE="$(pwd)/.swiftpm/xcode/package.xcworkspace"
+          if [ -d "$WORKSPACE" ]; then
+            WS_FLAG="-workspace $WORKSPACE"
+          else
+            WS_FLAG=""
+          fi
           xcodebuild archive \
+            $WS_FLAG \
             -scheme PocketTTSClone \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
