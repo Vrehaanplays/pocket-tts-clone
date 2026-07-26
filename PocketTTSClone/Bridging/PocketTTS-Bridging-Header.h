@@ -7,6 +7,6 @@
 #ifndef PocketTTS_Bridging_Header_h
 #define PocketTTS_Bridging_Header_h
 
-#include "sherpa-onnx/c-api/c-api.h"
+#include "c-api/c-api.h"
 
 #endif /* PocketTTS_Bridging_Header_h */
