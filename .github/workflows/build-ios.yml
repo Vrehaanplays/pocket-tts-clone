@@ -79,7 +79,7 @@ jobs:
             exit 1
           fi
 
-      - name: Debug: verify header location
+      - name: "Debug: verify header location"
         run: |
           ls -la PocketTTSClone/Bridging/c-api/
 
@@ -136,7 +136,7 @@ jobs:
                 echo "[WARN] swift build also failed"
             }
 
-      - name: Archive App (Release) & create IPA
+      - name: "Archive App (Release) and create IPA"
         if: github.event.inputs.skip_archive != 'true'
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
