@@ -158,22 +158,22 @@ jobs:
           elif [ -d "build/PocketTTSClone.xcarchive" ]; then
             # Archive exists but structure unexpected — try xcodebuild export
             echo "--- Trying xcodebuild -exportArchive ---"
-            cat > build/ExportOptions.plist << 'PLISTEOF'
-            <?xml version="1.0" encoding="UTF-8"?>
-            <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-            <plist version="1.0">
-            <dict>
-              <key>method</key>
-              <string>debug</string>
-              <key>signingStyle</key>
-              <string>automatic</string>
-              <key>compileBitcode</key>
-              <false/>
-              <key>uploadSymbols</key>
-              <false/>
-            </dict>
-            </plist>
-            PLISTEOF
+            # Use printf to avoid heredoc indentation issues in YAML block
+            printf '%s\n' \
+              '<?xml version="1.0" encoding="UTF-8"?>' \
+              '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+              '<plist version="1.0">' \
+              '<dict>' \
+              '  <key>method</key>' \
+              '  <string>debug</string>' \
+              '  <key>signingStyle</key>' \
+              '  <string>automatic</string>' \
+              '  <key>compileBitcode</key>' \
+              '  <false/>' \
+              '  <key>uploadSymbols</key>' \
+              '  <false/>' \
+              '</dict>' \
+              '</plist>' > build/ExportOptions.plist
             xcodebuild -exportArchive \
               -archivePath build/PocketTTSClone.xcarchive \
               -exportPath build/IPA \
