@@ -147,33 +147,33 @@ jobs:
 
           echo "--- Finding built product for IPA ---"
           mkdir -p build/IPA
-          PRODUCT_DIR="$DD/Build/Products"
 
-          # Find .app bundle (standard iOS app) or executable bundle
-          APP_PATH=$(find "$PRODUCT_DIR" -name "*.app" -type d 2>/dev/null | head -1)
-          EXEC_PATH=$(find "$PRODUCT_DIR" -name "PocketTTSClone" -type f 2>/dev/null | head -1)
+          # Search broadly in DerivedData for .app bundles or PocketTTSClone executables
+          APP_PATH=$(find "$DD" -name "PocketTTSClone.app" -type d 2>/dev/null | head -1)
+          EXEC_PATH=$(find "$DD" -name "PocketTTSClone" -type f ! -name "*.swift" ! -path "*/SourcePackages/*" 2>/dev/null | head -1)
 
           if [ -n "$APP_PATH" ]; then
             echo "Found .app bundle at: $APP_PATH"
             mkdir -p build/IPA/Payload
-            cp -r "$APP_PATH" build/IPA/Payload/
+            cp -r "$APP_PATH" build/IPA/Payload/PocketTTSClone.app
             cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
             echo "[OK] IPA created at build/IPA/PocketTTSClone.ipa"
           elif [ -n "$EXEC_PATH" ]; then
             echo "Found executable at: $EXEC_PATH — creating minimal .app bundle"
             mkdir -p build/IPA/Payload/PocketTTSClone.app
             cp "$EXEC_PATH" "build/IPA/Payload/PocketTTSClone.app/PocketTTSClone"
-            # Find and copy Info.plist from project
             if [ -f "PocketTTSClone/Info.plist" ]; then
               cp "PocketTTSClone/Info.plist" "build/IPA/Payload/PocketTTSClone.app/"
             fi
             cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
             echo "[OK] Minimal IPA created at build/IPA/PocketTTSClone.ipa"
           else
-            echo "[WARN] No .app or executable found in $PRODUCT_DIR"
-            ls -la "$PRODUCT_DIR" 2>/dev/null || echo "Products dir not found"
-            find "$DD" -name "PocketTTSClone*" -type f 2>/dev/null | head -5
+            echo "[WARN] No .app or executable found anywhere in $DD"
+            echo "--- Debug: searching DerivedData structure ---"
+            ls -la "$DD" 2>/dev/null
+            find "$DD" -name "PocketTTSClone*" -type f 2>/dev/null | head -10
             find "$DD" -name "*.app" -type d 2>/dev/null | head -5
+            find "$DD/Build" -maxdepth 4 -type d 2>/dev/null | head -20
           fi
 
       - name: Upload IPA artifact
