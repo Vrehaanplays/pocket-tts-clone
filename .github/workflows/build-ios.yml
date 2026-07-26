@@ -63,9 +63,21 @@ jobs:
         run: |
           # Copy sherpa-onnx C API headers alongside bridging header so
           # clang finds them via default quoted-include resolution
-          mkdir -p PocketTTSClone/Bridging/c-api
-          cp sherpa-onnx/c-api/c-api.h PocketTTSClone/Bridging/c-api/
-          ls -la PocketTTSClone/Bridging/c-api/
+          # The sherpa-onnx repo has source at sherpa-onnx/sherpa-onnx/
+          SHERPA_REPO_SRC="$(pwd)/sherpa-onnx/sherpa-onnx"
+          echo "Checking for headers at: $SHERPA_REPO_SRC/c-api/c-api.h"
+          ls -la "$SHERPA_REPO_SRC/c-api/" 2>/dev/null || echo "Not at that path, checking alternatives..."
+          find sherpa-onnx -name "c-api.h" -path "*/c-api/*" 2>/dev/null
+          SHERPA_HEADER=$(find sherpa-onnx -name "c-api.h" -path "*/c-api/*" 2>/dev/null | head -1)
+          if [ -n "$SHERPA_HEADER" ]; then
+            HEADER_DIR=$(dirname "$SHERPA_HEADER")
+            echo "Found headers at: $HEADER_DIR"
+            cp -r "$HEADER_DIR" PocketTTSClone/Bridging/c-api
+            ls -la PocketTTSClone/Bridging/c-api/
+          else
+            echo "⚠️ Could not find c-api.h in sherpa-onnx checkout"
+            exit 1
+          fi
 
       - name: Resolve Swift Package dependencies
         run: |
