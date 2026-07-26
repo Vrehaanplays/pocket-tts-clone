@@ -102,10 +102,8 @@ jobs:
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
             HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
-            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || \
-            if [ $? -ne 0 ]; then
+            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || {
               echo "⚠️ Build failed — trying fallback"
-              # Fallback: try with target name
               xcodebuild clean build \
                 -scheme PocketTTSClone \
                 -destination 'generic/platform=iOS' \
@@ -119,7 +117,7 @@ jobs:
                 OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
                 SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || \
                 echo "⚠️ Build had warnings — check logs"
-            fi
+            }
 
       - name: Archive App (Release, unsigned)
         if: github.event.inputs.skip_archive != 'true'
