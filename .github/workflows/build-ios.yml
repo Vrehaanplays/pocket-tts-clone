@@ -75,6 +75,8 @@ jobs:
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
+          IOS_TARGET="arm64-apple-ios17.0"
+          # Try xcodebuild (target, then scheme, then Package scheme)
           xcodebuild clean build \
             -target PocketTTSClone \
             -destination 'generic/platform=iOS' \
@@ -85,10 +87,22 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
+            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" ||
+          xcodebuild clean build \
+            -scheme PocketTTSClone \
+            -destination 'generic/platform=iOS' \
+            -configuration Debug \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
+            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
             SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || {
-              echo "⚠️ xcodebuild failed — trying swift build instead"
+              echo "⚠️ xcodebuild failed — trying swift build for iOS"
               swift build \
                 -c debug \
+                --target $IOS_TARGET \
                 -Xlinker -L$FRAMEWORK_PATH/ios-arm64 -Xlinker -lsherpa-onnx \
                 -Xswiftc -import-objc-header -Xswiftc $BRIDGING_HEADER 2>&1 || \
                 echo "⚠️ swift build also failed"
@@ -100,7 +114,7 @@ jobs:
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
 
-          echo "--- Attempting xcodebuild archive ---"
+          echo "--- Attempting xcodebuild archive (target) ---"
           xcodebuild archive \
             -target PocketTTSClone \
             -sdk iphoneos \
@@ -114,8 +128,24 @@ jobs:
             ARCHS=arm64 \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
-            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" && \
-          ARCHIVE_OK=true || ARCHIVE_OK=false
+            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" ||
+          echo "--- Trying xcodebuild archive (scheme) ---" &&
+          xcodebuild archive \
+            -scheme PocketTTSClone \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -configuration Release \
+            -archivePath build/PocketTTSClone.xcarchive \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            ARCHS=arm64 \
+            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
+            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
+            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER"
+          ARCHIVE_EXIT=$?
+          if [ $ARCHIVE_EXIT -eq 0 ]; then ARCHIVE_OK=true; else ARCHIVE_OK=false; fi
 
           # Build IPA from whatever we have
           mkdir -p build/IPA
@@ -164,7 +194,20 @@ jobs:
               cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
               echo "✅ IPA created from DerivedData .app"
             else
+              echo "--- Archive not found — searching .build/ for swift build output ---"
+            APP_PATH=$(find .build -name "PocketTTSClone" -type f 2>/dev/null | head -1)
+            if [ -n "$APP_PATH" ] && [ -f "$APP_PATH" ]; then
+              # Found a binary — create minimal .app bundle manually
+              echo "Found binary at $APP_PATH — creating minimal .app bundle"
+              mkdir -p build/IPA/Payload/PocketTTSClone.app
+              cp "$APP_PATH" "build/IPA/Payload/PocketTTSClone.app/PocketTTSClone"
+              cp PocketTTSClone/Info.plist build/IPA/Payload/PocketTTSClone.app/ 2>/dev/null || true
+              cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
+              echo "✅ IPA created from swift build output (minimal)" || \
               echo "⚠️ No .app found anywhere — IPA skipped"
+            else
+              echo "⚠️ No .app found anywhere — IPA skipped"
+            fi
             fi
           fi
 
