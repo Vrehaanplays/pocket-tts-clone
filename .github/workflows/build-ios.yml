@@ -117,21 +117,21 @@ jobs:
                 echo "[WARN] swift build also failed"
             }
 
-      - name: "Archive App (Release) and create IPA"
+      - name: "Build Release and create IPA"
         if: github.event.inputs.skip_archive != 'true'
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
-
           FRAMEWORK_DIR="$(dirname "$FRAMEWORK_PATH")"
-          echo "--- Attempting xcodebuild archive ---"
-          if xcodebuild archive \
+          DD="build/DerivedData"
+
+          echo "--- Building Release with xcodebuild ---"
+          xcodebuild build \
             -scheme PocketTTSClone \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -configuration Release \
-            -archivePath build/PocketTTSClone.xcarchive \
-            -derivedDataPath build/DerivedData \
+            -derivedDataPath "$DD" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -139,40 +139,41 @@ jobs:
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
             SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER"
-          then
-            ARCHIVE_OK=true
-          else
-            echo "[WARN] xcodebuild archive failed"
-            ARCHIVE_OK=false
+
+          if [ $? -ne 0 ]; then
+            echo "[ERROR] xcodebuild build failed"
+            exit 1
           fi
 
-          # Build IPA from whatever we have
+          echo "--- Finding built product for IPA ---"
           mkdir -p build/IPA
+          PRODUCT_DIR="$DD/Build/Products"
 
-          if [ "$ARCHIVE_OK" = true ]; then
-            # Find the .app — try xcarchive first, then DerivedData, then any .app in build/
-            echo "--- Locating .app bundle ---"
-            APP_PATH=""
-            if [ -d "build/PocketTTSClone.xcarchive/Products/Applications/PocketTTSClone.app" ]; then
-              APP_PATH="build/PocketTTSClone.xcarchive/Products/Applications/PocketTTSClone.app"
-              echo "Found .app in archive"
-            else
-              APP_PATH=$(find build/DerivedData -name "PocketTTSClone.app" -type d 2>/dev/null | head -1)
-              if [ -n "$APP_PATH" ]; then
-                echo "Found .app in DerivedData: $APP_PATH"
-              fi
+          # Find .app bundle (standard iOS app) or executable bundle
+          APP_PATH=$(find "$PRODUCT_DIR" -name "*.app" -type d 2>/dev/null | head -1)
+          EXEC_PATH=$(find "$PRODUCT_DIR" -name "PocketTTSClone" -type f 2>/dev/null | head -1)
+
+          if [ -n "$APP_PATH" ]; then
+            echo "Found .app bundle at: $APP_PATH"
+            mkdir -p build/IPA/Payload
+            cp -r "$APP_PATH" build/IPA/Payload/
+            cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
+            echo "[OK] IPA created at build/IPA/PocketTTSClone.ipa"
+          elif [ -n "$EXEC_PATH" ]; then
+            echo "Found executable at: $EXEC_PATH — creating minimal .app bundle"
+            mkdir -p build/IPA/Payload/PocketTTSClone.app
+            cp "$EXEC_PATH" "build/IPA/Payload/PocketTTSClone.app/PocketTTSClone"
+            # Find and copy Info.plist from project
+            if [ -f "PocketTTSClone/Info.plist" ]; then
+              cp "PocketTTSClone/Info.plist" "build/IPA/Payload/PocketTTSClone.app/"
             fi
-            if [ -n "$APP_PATH" ] && [ -d "$APP_PATH" ]; then
-              echo "--- Creating IPA from $APP_PATH ---"
-              mkdir -p build/IPA/Payload
-              cp -r "$APP_PATH" "build/IPA/Payload/PocketTTSClone.app"
-              cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
-              echo "[OK] IPA created at build/IPA/PocketTTSClone.ipa"
-            else
-              echo "[WARN] No .app found -- IPA skipped"
-            fi
+            cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
+            echo "[OK] Minimal IPA created at build/IPA/PocketTTSClone.ipa"
           else
-            echo "[WARN] Archive failed — IPA skipped"
+            echo "[WARN] No .app or executable found in $PRODUCT_DIR"
+            ls -la "$PRODUCT_DIR" 2>/dev/null || echo "Products dir not found"
+            find "$DD" -name "PocketTTSClone*" -type f 2>/dev/null | head -5
+            find "$DD" -name "*.app" -type d 2>/dev/null | head -5
           fi
 
       - name: Upload IPA artifact
@@ -180,9 +181,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: PocketTTSClone-iOS
-          path: |
-            build/IPA/*.ipa
-            build/PocketTTSClone.xcarchive
+          path: build/IPA/*.ipa
           retention-days: 7
           if-no-files-found: ignore
 
