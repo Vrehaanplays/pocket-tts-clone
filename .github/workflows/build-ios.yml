@@ -69,14 +69,20 @@ jobs:
           file sherpa-onnx/build-ios/sherpa-onnx.xcframework/ios-arm64/libsherpa-onnx.a
           echo "✅ sherpa-onnx xcframework built successfully"
 
-      - name: Set up Swift Package & generate xcodeproj
+      - name: Copy sherpa-onnx headers into bridging header directory
+        run: |
+          # Copy headers next to the bridging header so clang finds them
+          # via default quoted include resolution (relative to including file)
+          mkdir -p PocketTTSClone/Bridging/c-api
+          cp sherpa-onnx/c-api/c-api.h PocketTTSClone/Bridging/c-api/
+          echo "Copied headers:"
+          ls -la PocketTTSClone/Bridging/c-api/
+
+      - name: Set up Swift Package
         run: |
           swift package resolve
           swift package show-dependencies
-          # Generate xcodeproj so xcodebuild finds target/scheme
-          swift package generate-xcodeproj 2>&1 || true
-          ls -la *.xcodeproj 2>/dev/null || echo "No xcodeproj generated"
-          # Debug: list available schemes
+          # Debug: list available schemes/targets
           xcodebuild -list 2>&1 | head -50 || true
 
       - name: Build Swift App (Debug, device only)
@@ -84,15 +90,9 @@ jobs:
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
           SHERPA_SRC="$(pwd)/sherpa-onnx"
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
-          PROJECT="$(pwd)/PocketTTSClone.xcodeproj"
-          if [ -d "$PROJECT" ]; then
-            PROJ_FLAG="-project $PROJECT"
-          else
-            PROJ_FLAG=""
-          fi
+          # Try xcodebuild with -target (more reliable than -scheme for SPM)
           xcodebuild clean build \
-            $PROJ_FLAG \
-            -scheme PocketTTSClone \
+            -target PocketTTSClone \
             -destination 'generic/platform=iOS' \
             -configuration Debug \
             -derivedDataPath build/DerivedData \
@@ -100,13 +100,37 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
-            HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
             SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || {
-              echo "⚠️ Build failed — trying swift build instead"
+              echo "⚠️ xcodebuild failed — trying swift build instead"
               swift build \
                 -c debug \
-                -Xcc -I$SHERPA_SRC \
+                -Xlinker -L$FRAMEWORK_PATH/ios-arm64 -Xlinker -lsherpa-onnx \
+                -Xswiftc -import-objc-header -Xswiftc $BRIDGING_HEADER 2>&1 || \
+                echo "⚠️ swift build also failed"
+            }
+
+      - name: Build Swift App (Debug, device only)
+        run: |
+          FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
+          BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
+          # Try xcodebuild with -target (more reliable than -scheme for SPM)
+          # Headers are already copied to PocketTTSClone/Bridging/c-api/
+          xcodebuild clean build \
+            -target PocketTTSClone \
+            -destination 'generic/platform=iOS' \
+            -configuration Debug \
+            -derivedDataPath build/DerivedData \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
+            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
+            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || {
+              echo "⚠️ xcodebuild failed — trying swift build instead"
+              # swift build uses Package.swift settings which include cSettings
+              swift build \
+                -c debug \
                 -Xlinker -L$FRAMEWORK_PATH/ios-arm64 -Xlinker -lsherpa-onnx \
                 -Xswiftc -import-objc-header -Xswiftc $BRIDGING_HEADER 2>&1 || \
                 echo "⚠️ swift build also failed"
@@ -116,17 +140,9 @@ jobs:
         if: github.event.inputs.skip_archive != 'true'
         run: |
           FRAMEWORK_PATH="$(pwd)/sherpa-onnx/build-ios/sherpa-onnx.xcframework"
-          SHERPA_SRC="$(pwd)/sherpa-onnx"
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
-          PROJECT="$(pwd)/PocketTTSClone.xcodeproj"
-          if [ -d "$PROJECT" ]; then
-            PROJ_FLAG="-project $PROJECT"
-          else
-            PROJ_FLAG=""
-          fi
           xcodebuild archive \
-            $PROJ_FLAG \
-            -scheme PocketTTSClone \
+            -target PocketTTSClone \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \
             -configuration Release \
@@ -137,43 +153,51 @@ jobs:
             CODE_SIGNING_ALLOWED=NO \
             ARCHS=arm64 \
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_PATH" \
-            HEADER_SEARCH_PATHS="$SHERPA_SRC $FRAMEWORK_PATH/Headers" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
             SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER"
 
-      - name: Export unsigned IPA
+      - name: Build unsigned IPA manually (from archive)
         if: github.event.inputs.skip_archive != 'true'
         run: |
           mkdir -p build/IPA
-          cat > build/ExportOptions.plist << 'PLISTEOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>method</key>
-            <string>debug</string>
-            <key>signingStyle</key>
-            <string>automatic</string>
-            <key>compileBitcode</key>
-            <false/>
-            <key>uploadSymbols</key>
-            <false/>
-            <key>generateAppStoreInformation</key>
-            <false/>
-          </dict>
-          </plist>
-          PLISTEOF
-
           if [ -d "build/PocketTTSClone.xcarchive" ]; then
-            xcodebuild -exportArchive \
-              -archivePath build/PocketTTSClone.xcarchive \
-              -exportPath build/IPA \
-              -exportOptionsPlist build/ExportOptions.plist \
-              -allowProvisioningUpdates NO || \
-              cp -r build/PocketTTSClone.xcarchive build/IPA/ && \
-              echo "⚠️ Export failed — raw archive available at build/IPA/"
+            # Manually construct IPA from the archive's .app bundle
+            APP="build/PocketTTSClone.xcarchive/Products/Applications/PocketTTSClone.app"
+            if [ -d "$APP" ]; then
+              mkdir -p build/IPA/Payload
+              cp -r "$APP" build/IPA/Payload/
+              cd build/IPA
+              zip -r PocketTTSClone.ipa Payload/
+              cd ../..
+              echo "✅ IPA created at build/IPA/PocketTTSClone.ipa"
+            else
+              # Try xcodebuild -exportArchive as fallback
+              cat > build/ExportOptions.plist << 'PLISTEOF'
+              <?xml version="1.0" encoding="UTF-8"?>
+              <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+              <plist version="1.0">
+              <dict>
+                <key>method</key>
+                <string>debug</string>
+                <key>signingStyle</key>
+                <string>automatic</string>
+                <key>compileBitcode</key>
+                <false/>
+                <key>uploadSymbols</key>
+                <false/>
+              </dict>
+              </plist>
+              PLISTEOF
+              xcodebuild -exportArchive \
+                -archivePath build/PocketTTSClone.xcarchive \
+                -exportPath build/IPA \
+                -exportOptionsPlist build/ExportOptions.plist \
+                -allowProvisioningUpdates NO || \
+                cp -r build/PocketTTSClone.xcarchive build/IPA/ && \
+                echo "⚠️ Export failed — raw archive at build/IPA/"
+            fi
           else
-            echo "⚠️ No archive found — IPA export skipped"
+            echo "⚠️ No archive found — IPA build skipped"
           fi
 
       - name: Upload IPA artifact
@@ -193,20 +217,3 @@ jobs:
           name: sherpa-onnx-xcframework
           path: sherpa-onnx/build-ios/sherpa-onnx.xcframework
           retention-days: 30
-
-      - name: Summary
-        run: |
-          echo "## ✅ Build Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Artifact | Location |" >> $GITHUB_STEP_SUMMARY
-          echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| sherpa-onnx xcframework | sherpa-onnx/build-ios/sherpa-onnx.xcframework |" >> $GITHUB_STEP_SUMMARY
-          echo "| iOS App (if archived) | build/PocketTTSClone.xcarchive |" >> $GITHUB_STEP_SUMMARY
-          echo "| IPA (if exported) | build/IPA/ |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### To deploy via AltStore:" >> $GITHUB_STEP_SUMMARY
-          echo "1. Download PocketTTSClone.ipa from artifacts" >> $GITHUB_STEP_SUMMARY
-          echo "2. Open AltServer on your Windows PC" >> $GITHUB_STEP_SUMMARY
-          echo "3. Connect iPhone via USB" >> $GITHUB_STEP_SUMMARY
-          echo "4. AltServer → Install AltStore → select device" >> $GITHUB_STEP_SUMMARY
-          echo "5. Open AltStore on iPhone → My Apps → + → select IPA" >> $GITHUB_STEP_SUMMARY
