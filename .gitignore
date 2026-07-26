@@ -4,6 +4,7 @@
 !.github/
 !Package.swift
 !.gitignore
+!.gitattributes
 !README.md
 
 # Build artifacts
