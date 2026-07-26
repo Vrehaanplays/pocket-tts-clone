@@ -57,7 +57,7 @@ jobs:
         run: |
           echo "Building sherpa-onnx iOS xcframework..."
           bash build-ios.sh
-          echo "✅ sherpa-onnx xcframework built"
+          echo "[OK] sherpa-onnx xcframework built"
 
       - name: Copy headers next to bridging header
         run: |
@@ -75,7 +75,7 @@ jobs:
             cp "$HEADER_DIR/c-api.h" PocketTTSClone/Bridging/c-api/
             ls -la PocketTTSClone/Bridging/c-api/
           else
-            echo "⚠️ Could not find c-api.h in sherpa-onnx checkout"
+            echo "[ERROR] Could not find c-api.h in sherpa-onnx checkout"
             exit 1
           fi
 
@@ -127,13 +127,13 @@ jobs:
             FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
             OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
             SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" || {
-              echo "⚠️ xcodebuild failed — trying swift build for iOS"
+              echo "[WARN] xcodebuild failed -- trying swift build for iOS"
               swift build \
                 -c debug \
                 --target $IOS_TARGET \
                 -Xlinker -L$FRAMEWORK_PATH/ios-arm64 -Xlinker -lsherpa-onnx \
                 -Xswiftc -import-objc-header -Xswiftc $BRIDGING_HEADER 2>&1 || \
-                echo "⚠️ swift build also failed"
+                echo "[WARN] swift build also failed"
             }
 
       - name: Archive App (Release) & create IPA
@@ -193,7 +193,7 @@ jobs:
           then
             ARCHIVE_OK=true
           else
-            echo "⚠️ All xcodebuild archive attempts failed"
+            echo "[WARN] All xcodebuild archive attempts failed"
             ARCHIVE_OK=false
           fi
 
@@ -206,7 +206,7 @@ jobs:
             mkdir -p build/IPA/Payload
             cp -r "build/PocketTTSClone.xcarchive/Products/Applications/PocketTTSClone.app" build/IPA/Payload/
             cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
-            echo "✅ IPA created at build/IPA/PocketTTSClone.ipa"
+            echo "[OK] IPA created at build/IPA/PocketTTSClone.ipa"
           elif [ -d "build/PocketTTSClone.xcarchive" ]; then
             # Archive exists but structure unexpected — try xcodebuild export
             echo "--- Trying xcodebuild -exportArchive ---"
@@ -231,8 +231,8 @@ jobs:
               -exportPath build/IPA \
               -exportOptionsPlist build/ExportOptions.plist \
               -allowProvisioningUpdates NO && \
-              echo "✅ IPA exported via xcodebuild" || \
-              echo "⚠️ IPA export failed — archive saved raw"
+              echo "[OK] IPA exported via xcodebuild" || \
+              echo "[WARN] IPA export failed -- archive saved raw"
           else
             # No archive — try building .app directly from DerivedData
             echo "--- Archive not found — looking for .app in DerivedData ---"
@@ -242,7 +242,7 @@ jobs:
               mkdir -p build/IPA/Payload
               cp -r "$APP_PATH" build/IPA/Payload/
               cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
-              echo "✅ IPA created from DerivedData .app"
+              echo "[OK] IPA created from DerivedData .app"
             else
               echo "--- Searching .build/ for swift build output ---"
               BINARY_PATH=$(find .build -name "PocketTTSClone" -type f 2>/dev/null | head -1)
@@ -252,9 +252,9 @@ jobs:
                 cp "$BINARY_PATH" "build/IPA/Payload/PocketTTSClone.app/PocketTTSClone"
                 cp PocketTTSClone/Info.plist build/IPA/Payload/PocketTTSClone.app/ 2>/dev/null || true
                 cd build/IPA && zip -r PocketTTSClone.ipa Payload/ && cd ../..
-                echo "✅ IPA created from swift build output (minimal)"
+                echo "[OK] IPA created from swift build output (minimal)"
               else
-                echo "⚠️ No .app found anywhere — IPA skipped"
+                echo "[WARN] No .app found anywhere -- IPA skipped"
               fi
             fi
           fi
