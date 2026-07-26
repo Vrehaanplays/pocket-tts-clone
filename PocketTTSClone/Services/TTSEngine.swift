@@ -161,7 +161,11 @@ final class TTSEngine {
                 let extraJSON = """
                 {"max_reference_audio_len": \(config.maxReferenceAudioLen), "seed": \(config.seed)}
                 """
-                let extraC = (extraJSON as NSString).utf8String.map { UnsafePointer(strdup($0)) }
+                let cstr = (extraJSON as NSString).utf8String
+                var extraC: UnsafePointer<CChar>? = nil
+                if let cstr = cstr, let duped = strdup(cstr) {
+                    extraC = UnsafePointer(duped)
+                }
                 genConfig.extra = extraC
 
                 // The C API callback is: int32_t callback(const float*, int32_t, float, void*)

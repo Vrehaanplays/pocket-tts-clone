@@ -97,17 +97,7 @@ jobs:
           BRIDGING_HEADER="$(pwd)/PocketTTSClone/Bridging/PocketTTS-Bridging-Header.h"
           IOS_TARGET="arm64-apple-ios17.0"
           FRAMEWORK_DIR="$(dirname "$FRAMEWORK_PATH")"
-          # Try xcodebuild (target, then scheme, then Package scheme)
-          xcodebuild clean build \
-            -target PocketTTSClone \
-            -destination 'generic/platform=iOS' \
-            -configuration Debug \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
-            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
-            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER" ||
+          # Try xcodebuild with scheme (no -target, SPM-based project has no .xcodeproj)
           xcodebuild clean build \
             -scheme PocketTTSClone \
             -destination 'generic/platform=iOS' \
@@ -131,7 +121,7 @@ jobs:
               echo "[WARN] xcodebuild failed -- trying swift build for iOS"
               swift build \
                 -c debug \
-                --target $IOS_TARGET \
+                --destination $IOS_TARGET \
                 -Xlinker -L$FRAMEWORK_PATH/ios-arm64 -Xlinker -lsherpa-onnx \
                 -Xswiftc -import-objc-header -Xswiftc $BRIDGING_HEADER 2>&1 || \
                 echo "[WARN] swift build also failed"
@@ -146,21 +136,6 @@ jobs:
           FRAMEWORK_DIR="$(dirname "$FRAMEWORK_PATH")"
           echo "--- Attempting xcodebuild archive ---"
           if xcodebuild archive \
-            -target PocketTTSClone \
-            -sdk iphoneos \
-            -destination 'generic/platform=iOS' \
-            -configuration Release \
-            -archivePath build/PocketTTSClone.xcarchive \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            ARCHS=arm64 \
-            FRAMEWORK_SEARCH_PATHS="$FRAMEWORK_DIR" \
-            OTHER_LDFLAGS="-L$FRAMEWORK_PATH/ios-arm64 -lsherpa-onnx" \
-            SWIFT_OBJC_BRIDGING_HEADER="$BRIDGING_HEADER"
-          then
-            ARCHIVE_OK=true
-          elif xcodebuild archive \
             -scheme PocketTTSClone \
             -sdk iphoneos \
             -destination 'generic/platform=iOS' \

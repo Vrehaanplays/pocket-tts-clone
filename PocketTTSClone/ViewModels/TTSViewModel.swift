@@ -260,7 +260,7 @@ final class TTSViewModel: ObservableObject {
 
     private func getAudioDuration(url: URL) async -> TimeInterval {
         let asset = AVAsset(url: url)
-        return await asset.load(.duration).seconds
+        return (try? await asset.load(.duration).seconds) ?? 0
     }
 
     private func loadSavedVoices() {

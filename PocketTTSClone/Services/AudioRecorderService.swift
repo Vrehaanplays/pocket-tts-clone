@@ -149,7 +149,7 @@ final class AudioRecorderService: NSObject, ObservableObject {
             var dataLength: Int = 0
             CMBlockBufferGetDataPointer(
                 blockBuffer, atOffset: 0,
-                lengthAvailableOut: nil,
+                lengthAtOffsetOut: nil,
                 totalLengthOut: &dataLength,
                 dataPointerOut: &dataPointer
             )
