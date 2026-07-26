@@ -102,7 +102,6 @@ jobs:
             -target PocketTTSClone \
             -destination 'generic/platform=iOS' \
             -configuration Debug \
-            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -113,7 +112,6 @@ jobs:
             -scheme PocketTTSClone \
             -destination 'generic/platform=iOS' \
             -configuration Debug \
-            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -124,7 +122,6 @@ jobs:
             -scheme PocketTTSClone-Package \
             -destination 'generic/platform=iOS' \
             -configuration Debug \
-            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -154,7 +151,6 @@ jobs:
             -destination 'generic/platform=iOS' \
             -configuration Release \
             -archivePath build/PocketTTSClone.xcarchive \
-            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -170,7 +166,6 @@ jobs:
             -destination 'generic/platform=iOS' \
             -configuration Release \
             -archivePath build/PocketTTSClone.xcarchive \
-            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
@@ -186,7 +181,6 @@ jobs:
             -destination 'generic/platform=iOS' \
             -configuration Release \
             -archivePath build/PocketTTSClone.xcarchive \
-            -derivedDataPath build/DerivedData \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \

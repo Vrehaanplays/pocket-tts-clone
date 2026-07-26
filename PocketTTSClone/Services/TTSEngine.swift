@@ -46,6 +46,8 @@ final class TTSEngine {
     private var tts: OpaquePointer?
     private let config: PocketTTSModelConfig
     private let queue = DispatchQueue(label: "com.pockettts.engine", qos: .userInitiated)
+    // Keep retained C string copies alive until engine is destroyed
+    private var retainedStrings: [UnsafeMutablePointer<Int8>] = []
 
     init(config: PocketTTSModelConfig) throws {
         self.config = config
@@ -66,22 +68,20 @@ final class TTSEngine {
         }
 
         var pocketConfig = SherpaOnnxOfflineTtsPocketModelConfig()
-        // Retain copies so they stay alive
-        let lmFlowC = (config.lmFlow as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-        let lmMainC = (config.lmMain as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-        let encoderC = (config.encoder as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-        let decoderC = (config.decoder as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-        let textCondC = (config.textConditioner as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-        let vocabC = (config.vocabJson as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-        let tokenC = (config.tokenScoresJson as NSString).utf8String.map { UnsafePointer(strdup($0)) }
+        // Helper to create retained C strings
+        func retain(_ str: String) -> UnsafePointer<CChar>? {
+            guard let cStr = strdup(str) else { return nil }
+            retainedStrings.append(cStr)
+            return UnsafePointer(cStr)
+        }
 
-        pocketConfig.lm_flow = lmFlowC?.pointee
-        pocketConfig.lm_main = lmMainC?.pointee
-        pocketConfig.encoder = encoderC?.pointee
-        pocketConfig.decoder = decoderC?.pointee
-        pocketConfig.text_conditioner = textCondC?.pointee
-        pocketConfig.vocab_json = vocabC?.pointee
-        pocketConfig.token_scores_json = tokenC?.pointee
+        pocketConfig.lm_flow = retain(config.lmFlow)
+        pocketConfig.lm_main = retain(config.lmMain)
+        pocketConfig.encoder = retain(config.encoder)
+        pocketConfig.decoder = retain(config.decoder)
+        pocketConfig.text_conditioner = retain(config.textConditioner)
+        pocketConfig.vocab_json = retain(config.vocabJson)
+        pocketConfig.token_scores_json = retain(config.tokenScoresJson)
         pocketConfig.voice_embedding_cache_capacity = 50
 
         var modelConfig = SherpaOnnxOfflineTtsModelConfig()
@@ -89,8 +89,7 @@ final class TTSEngine {
         modelConfig.num_threads = 2
         modelConfig.debug = 0
 
-        let providerC = ("cpu" as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-        modelConfig.provider = providerC?.pointee
+        modelConfig.provider = retain("cpu")
 
         var ttsConfig = SherpaOnnxOfflineTtsConfig()
         ttsConfig.model = modelConfig
@@ -98,19 +97,17 @@ final class TTSEngine {
         ttsConfig.silence_scale = 0.2
 
         guard let engine = SherpaOnnxCreateOfflineTts(&ttsConfig) else {
-            // Clean up allocated strings on failure
-            [lmFlowC, lmMainC, encoderC, decoderC, textCondC, vocabC, tokenC, providerC].compactMap { $0 }.forEach {
-                free(UnsafeMutablePointer(mutating: $0.pointee))
-            }
+            // Clean up all retained strings on failure
+            retainedStrings.forEach { free($0) }
+            retainedStrings.removeAll()
             throw AppError.engine("SherpaOnnxCreateOfflineTts returned nil")
         }
 
         self.tts = engine
 
         // We can free the duplicated strings now since the engine copies internally
-        [lmFlowC, lmMainC, encoderC, decoderC, textCondC, vocabC, tokenC, providerC].compactMap { $0 }.forEach {
-            free(UnsafeMutablePointer(mutating: $0.pointee))
-        }
+        retainedStrings.forEach { free($0) }
+        retainedStrings.removeAll()
 
         print("Pocket TTS engine initialized successfully")
     }
@@ -155,7 +152,7 @@ final class TTSEngine {
 
                 var genConfig = SherpaOnnxGenerationConfig()
                 genConfig.speed = config.speed
-                genConfig.silence_scale = config.silence_scale
+                genConfig.silence_scale = config.silenceScale
                 genConfig.num_steps = config.numSteps
                 genConfig.reference_audio = wave.pointee.samples
                 genConfig.reference_audio_len = wave.pointee.num_samples
@@ -165,7 +162,7 @@ final class TTSEngine {
                 {"max_reference_audio_len": \(config.maxReferenceAudioLen), "seed": \(config.seed)}
                 """
                 let extraC = (extraJSON as NSString).utf8String.map { UnsafePointer(strdup($0)) }
-                genConfig.extra = extraC?.pointee
+                genConfig.extra = extraC
 
                 // The C API callback is: int32_t callback(const float*, int32_t, float, void*)
                 // The 4th argument is the combined callback, 5th is user data
@@ -187,12 +184,12 @@ final class TTSEngine {
                     callback,
                     nil
                 ) else {
-                    if let cPtr = extraC { free(UnsafeMutablePointer(mutating: cPtr.pointee)) }
+                    if let cPtr = extraC { free(UnsafeMutablePointer(mutating: cPtr)) }
                     continuation.resume(throwing: AppError.generation("Generation returned nil"))
                     return
                 }
 
-                if let cPtr = extraC { free(UnsafeMutablePointer(mutating: cPtr.pointee)) }
+                if let cPtr = extraC { free(UnsafeMutablePointer(mutating: cPtr)) }
 
                 let outputDir = FileManager.default.temporaryDirectory
                     .appendingPathComponent("com.pockettts.generated", isDirectory: true)
